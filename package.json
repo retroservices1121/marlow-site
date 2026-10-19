@@ -1,0 +1,8 @@
+{
+  "name": "marlow-public-website",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": { "build": "node build.cjs", "check": "node validate.cjs" },
+  "dependencies": { "sharp": "0.35.5" },
+  "engines": { "node": ">=22" }
+}
