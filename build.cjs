@@ -90,15 +90,56 @@ async function banner(w,h,name){
   await label(layers,'marlow.lol',60*s,Math.min(h-55*s,485*s),20*s,'#22d3ee',800,w*.5);
   await sharp(svg(w,h,b)).composite(layers).removeAlpha().png().toFile(path.join(asset,name));
 }
+// Page header only. Favicon and the published app icon stay on the original opaque avatar.
+async function headerMark(src, dest) {
+  const {data, info} = await sharp(src).removeAlpha().raw().toBuffer({resolveWithObject:true});
+  const w = info.width, h = info.height, cutoff = 42;
+  const bg = new Uint8Array(w * h);
+  const qx = new Int32Array(w * h), qy = new Int32Array(w * h);
+  let qe = 0;
+  const maxAt = (x, y) => { const i = (y * w + x) * 3; return Math.max(data[i], data[i + 1], data[i + 2]); };
+  const push = (x, y) => {
+    const p = y * w + x;
+    if (bg[p] || maxAt(x, y) > cutoff) return;
+    bg[p] = 1; qx[qe] = x; qy[qe] = y; qe++;
+  };
+  for (let x = 0; x < w; x++) { push(x, 0); push(x, h - 1); }
+  for (let y = 0; y < h; y++) { push(0, y); push(w - 1, y); }
+  for (let qs = 0; qs < qe; qs++) {
+    const x = qx[qs], y = qy[qs];
+    if (x > 0) push(x - 1, y);
+    if (x + 1 < w) push(x + 1, y);
+    if (y > 0) push(x, y - 1);
+    if (y + 1 < h) push(x, y + 1);
+  }
+  const out = Buffer.alloc(w * h * 4);
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    const p = y * w + x, i = p * 3, o = p * 4;
+    if (bg[p]) continue;
+    let r = data[i], g = data[i + 1], b = data[i + 2];
+    const touch = (x > 0 && bg[p - 1]) || (x + 1 < w && bg[p + 1]) || (y > 0 && bg[p - w]) || (y + 1 < h && bg[p + w]);
+    if (touch) {
+      const m = Math.max(r, g, b, 1), a = m / 255;
+      out[o] = Math.min(255, Math.round(r / a));
+      out[o + 1] = Math.min(255, Math.round(g / a));
+      out[o + 2] = Math.min(255, Math.round(b / a));
+      out[o + 3] = m;
+    } else {
+      out[o] = r; out[o + 1] = g; out[o + 2] = b; out[o + 3] = 255;
+    }
+  }
+  await sharp(out, {raw:{width:w, height:h, channels:4}}).png().toFile(dest);
+}
 function layout(title,description,body,depth=0,slug=''){
   const p=depth?'../':'./',url=c.siteUrl.replace(/\/$/,'')+(slug?`/${slug}/`:'/');
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(title)} | Marlow LoL</title><meta name="description" content="${esc(description)}"><link rel="canonical" href="${esc(url)}"><meta property="og:type" content="website"><meta property="og:title" content="${esc(title)} | Marlow LoL"><meta property="og:description" content="${esc(description)}"><meta property="og:url" content="${esc(url)}"><meta property="og:image" content="${esc(c.siteUrl)}/assets/marlow-social-preview.png"><meta property="og:image:width" content="1200"><meta property="og:image:height" content="630"><meta name="twitter:card" content="summary_large_image"><meta name="twitter:image" content="${esc(c.siteUrl)}/assets/marlow-social-preview.png"><link rel="icon" href="${p}assets/favicon.png"><link rel="stylesheet" href="${p}styles.css"></head><body><a class="skip" href="#main">Skip to content</a><header><a class="brand" href="${p}"><img src="${p}assets/marlow-avatar.png" width="54" height="54" alt=""><span>Marlow<span class="gradient">.lol</span></span></a><nav aria-label="Main navigation"><a href="${p}#how-it-works">How it works</a><a href="${p}support/">Support</a></nav></header>${body}<footer><span>© ${new Date().getUTCFullYear()} ${esc(c.operator)} · Made for your people.</span><div><a href="${p}privacy/">Privacy</a><a href="${p}terms/">Terms</a><a href="${p}support/">Support</a></div></footer></body></html>`;
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(title)} | Marlow LoL</title><meta name="description" content="${esc(description)}"><link rel="canonical" href="${esc(url)}"><meta property="og:type" content="website"><meta property="og:title" content="${esc(title)} | Marlow LoL"><meta property="og:description" content="${esc(description)}"><meta property="og:url" content="${esc(url)}"><meta property="og:image" content="${esc(c.siteUrl)}/assets/marlow-social-preview.png"><meta property="og:image:width" content="1200"><meta property="og:image:height" content="630"><meta name="twitter:card" content="summary_large_image"><meta name="twitter:image" content="${esc(c.siteUrl)}/assets/marlow-social-preview.png"><link rel="icon" href="${p}assets/favicon.png"><link rel="stylesheet" href="${p}styles.css"></head><body><a class="skip" href="#main">Skip to content</a><header><a class="brand" href="${p}"><img src="${p}assets/marlow-header-mark.png" width="54" height="54" alt=""><span>Marlow<span class="gradient">.lol</span></span></a><nav aria-label="Main navigation"><a href="${p}#how-it-works">How it works</a><a href="${p}support/">Support</a></nav></header>${body}<footer><span>© ${new Date().getUTCFullYear()} ${esc(c.operator)} · Made for your people.</span><div><a href="${p}privacy/">Privacy</a><a href="${p}terms/">Terms</a><a href="${p}support/">Support</a></div></footer></body></html>`;
 }
 async function main(){
   fs.copyFileSync(bold,path.join(asset,'poppins-bold.ttf'));fs.copyFileSync(regular,path.join(asset,'poppins-regular.ttf'));
   fs.copyFileSync(logo,path.join(asset,'marlow-lockup.png'));fs.copyFileSync(icon,path.join(asset,'marlow-avatar.png'));
   const license=path.resolve(path.dirname(bold),'../OFL.txt');if(fs.existsSync(license))fs.copyFileSync(license,path.join(asset,'Poppins-OFL.txt'));else if(fs.existsSync(path.join(sourceAsset,'Poppins-OFL.txt')))fs.copyFileSync(path.join(sourceAsset,'Poppins-OFL.txt'),path.join(asset,'Poppins-OFL.txt'));
   await sharp(icon).resize(64,64).png().toFile(path.join(asset,'favicon.png'));
+  await headerMark(icon, path.join(asset,'marlow-header-mark.png'));
   const previews=[];previews.push(await composition('circles','Every side of you.\nOne Circle at a time.','Bring together the people who know you best.','01'));
   previews.push(await composition('play','Quick picks.\nReal friends.','Who gives the best advice? Your people decide.','02'));
   previews.push(await composition('you','See yourself\nthrough their eyes.','Discover the traits your friends see in you.','03'));
