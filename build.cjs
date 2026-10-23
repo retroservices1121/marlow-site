@@ -130,9 +130,37 @@ async function headerMark(src, dest) {
   }
   await sharp(out, {raw:{width:w, height:h, channels:4}}).png().toFile(dest);
 }
+function ico(images){
+  const header=Buffer.alloc(6);
+  header.writeUInt16LE(0,0);header.writeUInt16LE(1,2);header.writeUInt16LE(images.length,4);
+  const entries=Buffer.alloc(16*images.length);
+  let offset=6+entries.length;
+  const parts=[header,entries];
+  images.forEach((img,i)=>{
+    const e=i*16;
+    entries.writeUInt8(img.size>=256?0:img.size,e);
+    entries.writeUInt8(img.size>=256?0:img.size,e+1);
+    entries.writeUInt16LE(1,e+4);
+    entries.writeUInt16LE(32,e+6);
+    entries.writeUInt32LE(img.buffer.length,e+8);
+    entries.writeUInt32LE(offset,e+12);
+    offset+=img.buffer.length;
+    parts.push(img.buffer);
+  });
+  return Buffer.concat(parts);
+}
+async function favicons(src){
+  const png=async size=>sharp(src).resize(size,size,{fit:'cover'}).png().toBuffer();
+  const sized={};
+  for(const size of [16,32,48,180,192]) sized[size]=await png(size);
+  fs.writeFileSync(path.join(out,'favicon.ico'),ico([16,32,48].map(size=>({size,buffer:sized[size]}))));
+  fs.writeFileSync(path.join(asset,'favicon-32.png'),sized[32]);
+  fs.writeFileSync(path.join(asset,'favicon-192.png'),sized[192]);
+  fs.writeFileSync(path.join(asset,'apple-touch-icon.png'),sized[180]);
+}
 function layout(title,description,body,depth=0,slug=''){
   const p=depth?'../':'./',url=c.siteUrl.replace(/\/$/,'')+(slug?`/${slug}/`:'/');
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(title)} | Marlow LoL</title><meta name="description" content="${esc(description)}"><link rel="canonical" href="${esc(url)}"><meta property="og:type" content="website"><meta property="og:title" content="${esc(title)} | Marlow LoL"><meta property="og:description" content="${esc(description)}"><meta property="og:url" content="${esc(url)}"><meta property="og:image" content="${esc(c.siteUrl)}/assets/marlow-social-preview.png"><meta property="og:image:width" content="1200"><meta property="og:image:height" content="630"><meta name="twitter:card" content="summary_large_image"><meta name="twitter:image" content="${esc(c.siteUrl)}/assets/marlow-social-preview.png"><link rel="icon" href="${p}assets/favicon.png"><link rel="stylesheet" href="${p}styles.css"></head><body><a class="skip" href="#main">Skip to content</a><header><a class="brand" href="${p}"><img src="${p}assets/marlow-header-mark.png" width="54" height="54" alt=""><span>Marlow<span class="gradient">.lol</span></span></a><nav aria-label="Main navigation"><a href="${p}#how-it-works">How it works</a><a href="${p}support/">Support</a></nav></header>${body}<footer><span>© ${new Date().getUTCFullYear()} ${esc(c.operator)} · Made for your people.</span><div><a href="${p}privacy/">Privacy</a><a href="${p}terms/">Terms</a><a href="${p}support/">Support</a></div></footer></body></html>`;
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(title)} | Marlow LoL</title><meta name="description" content="${esc(description)}"><link rel="canonical" href="${esc(url)}"><meta property="og:type" content="website"><meta property="og:title" content="${esc(title)} | Marlow LoL"><meta property="og:description" content="${esc(description)}"><meta property="og:url" content="${esc(url)}"><meta property="og:image" content="${esc(c.siteUrl)}/assets/marlow-social-preview.png"><meta property="og:image:width" content="1200"><meta property="og:image:height" content="630"><meta name="twitter:card" content="summary_large_image"><meta name="twitter:image" content="${esc(c.siteUrl)}/assets/marlow-social-preview.png"><link rel="icon" href="${p}favicon.ico?v=2" sizes="any"><link rel="icon" type="image/png" href="${p}assets/favicon-32.png?v=2" sizes="32x32"><link rel="icon" type="image/png" href="${p}assets/favicon-192.png?v=2" sizes="192x192"><link rel="apple-touch-icon" href="${p}assets/apple-touch-icon.png?v=2"><link rel="stylesheet" href="${p}styles.css"></head><body><a class="skip" href="#main">Skip to content</a><header><a class="brand" href="${p}"><img src="${p}assets/marlow-header-mark.png" width="54" height="54" alt=""><span>Marlow<span class="gradient">.lol</span></span></a><nav aria-label="Main navigation"><a href="${p}#how-it-works">How it works</a><a href="${p}support/">Support</a></nav></header>${body}<footer><span>© ${new Date().getUTCFullYear()} ${esc(c.operator)} · Made for your people.</span><div><a href="${p}privacy/">Privacy</a><a href="${p}terms/">Terms</a><a href="${p}support/">Support</a></div></footer></body></html>`;
 }
 function previewPhones(){
   const tab=on=>`<div class="tabs" aria-hidden="true"><span class="${on==='Play'?'on':''}">Play</span><span class="${on==='You'?'on':''}">You</span><span class="${on==='Circles'?'on':''}">Circles</span></div><div class="home-bar" aria-hidden="true"></div>`;
@@ -148,7 +176,7 @@ async function main(){
   fs.copyFileSync(bold,path.join(asset,'poppins-bold.ttf'));fs.copyFileSync(regular,path.join(asset,'poppins-regular.ttf'));
   fs.copyFileSync(logo,path.join(asset,'marlow-lockup.png'));fs.copyFileSync(icon,path.join(asset,'marlow-avatar.png'));
   const license=path.resolve(path.dirname(bold),'../OFL.txt');if(fs.existsSync(license))fs.copyFileSync(license,path.join(asset,'Poppins-OFL.txt'));else if(fs.existsSync(path.join(sourceAsset,'Poppins-OFL.txt')))fs.copyFileSync(path.join(sourceAsset,'Poppins-OFL.txt'),path.join(asset,'Poppins-OFL.txt'));
-  await sharp(icon).resize(64,64).png().toFile(path.join(asset,'favicon.png'));
+  await favicons(icon);
   await headerMark(icon, path.join(asset,'marlow-header-mark.png'));
   const previews=[];previews.push(await composition('circles','Every side of you.\nOne Circle at a time.','Bring together the people who know you best.','01'));
   previews.push(await composition('play','Quick picks.\nReal friends.','Who gives the best advice? Your people decide.','02'));
