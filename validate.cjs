@@ -6,6 +6,7 @@ for(const name of ['index.html','privacy/index.html','support/index.html','terms
   assert(html.includes('<html lang="en">'),name+' missing language');
   assert(html.includes('id="main"'),name+' missing main anchor');
   assert(!/V1.*draft|contact information will be published|TODO|undefined/.test(html),name+' contains placeholders');
+  assert(!html.includes('/login') && !html.includes('Sign in'),name+' still contains a sign-in link');
   for(const [,link] of html.matchAll(/(?:src|href)="([^"]+)"/g)){
     if(/^(https?:|mailto:|#)/.test(link))continue;
     const target=path.resolve(path.dirname(file),link.split('#')[0]);
